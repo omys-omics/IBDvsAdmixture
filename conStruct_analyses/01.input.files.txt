@@ -1,0 +1,15 @@
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/IBD/str.files/IBD.gen.0.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/IBD/str.files/IBD.gen.200.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/IBD/str.files/IBD.gen.1000.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/IBD/str.files/IBD.gen.10000.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/IBD/str.files/IBD.gen.19000.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/SecondaryContact/str.files/Secondary_Contact.gen.0.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/SecondaryContact/str.files/Secondary_Contact.gen.200.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/SecondaryContact/str.files/Secondary_Contact.gen.1000.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/SecondaryContact/str.files/Secondary_Contact.gen.10000.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/SecondaryContact/str.files/Secondary_Contact.gen.19000.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/TensionZone/str.files/Tension_Zone.gen.0.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/TensionZone/str.files/Tension_Zone.gen.200.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/TensionZone/str.files/Tension_Zone.gen.1000.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/TensionZone/str.files/Tension_Zone.gen.10000.str
+/panfs/pfs.local/work/colella/ben/002.simulations/003.SecondaryContact_vs_IBD/TensionZone/str.files/Tension_Zone.gen.19000.str
