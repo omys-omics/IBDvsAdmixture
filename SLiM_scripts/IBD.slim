@@ -1,0 +1,335 @@
+// Keywords: range expansion, colonization, population spread, migration
+
+initialize() {
+	defineConstant("K", 500);   // carrying capacity per subpop
+	defineConstant("N", 21);     // number of subpopulations
+	defineConstant("M", 0.001);   // migration probability
+	defineConstant("R", 1.04);   // mean reproduction (as first parent)
+	defineConstant("L", c(0.0, 1.0));		// probability of mortality at each age
+	defineConstant("BP", 100000);
+	defineGlobal("genSinceContact", -1);
+
+
+	initializeSLiMModelType("nonWF");
+	initializeMutationType("m5", 0.5, "f", 0.0);		//always neutral
+	initializeMutationType("m7", 0.5, "f", 0.0);		//neutral; at generation 20000, fixed mutations of type m5 in p0 are converted to this in order to track them; they are still neutral
+	initializeMutationType("m8", 0.5, "f", 0.0);		//neutral; at generation 20000, fixed mutations of type m5 in p20 are converted to this inorder to track them; they are still neutral
+	initializeMutationType("m9", 0.5, "f", 0.0);		// mutations that are fixed at the end of initial mixing are converted to this, but retain their original selection coefficients
+
+	m5.convertToSubstitution = F;
+	m7.convertToSubstitution = F;
+	m8.convertToSubstitution = F;
+	m9.convertToSubstitution = F;
+	m5.color = "yellow";
+	m7.color = "darkgoldenrod4";
+	m8.color = "ghostwhite";
+	m9.color = "burlywood2";
+
+	
+	initializeMutationRate(1e-7);		  // default is 1e-7
+	initializeRecombinationRate(1e-5); // default is 1e-8
+		
+	initializeGenomicElementType("g1", c(m5), c(1));  // noncoding
+	initializeGenomicElement(g1, 0, BP);
+}
+
+
+
+reproduction() {
+	// individuals reproduce locally, without dispersal
+	if (individual.age >= 0) {
+		litterSize = rpois(1, R);
+	}
+	
+	for (i in seqLen(litterSize))
+	{
+		// generate each offspring with an independently drawn mate
+		mate = subpop.sampleIndividuals(1, exclude=individual);
+		if (mate.size())
+			subpop.addCrossed(individual, mate);
+	}
+}
+
+1 early() {
+	// create an initial population of 100 individuals, the rest empty
+	for (i in seqLen(N))
+		sim.addSubpop(i, (i == 0 | i == 20) ? 100 else 0);
+}
+
+
+
+1:10000 early () {
+	// pre-plan migration of individuals to adjacent subpops
+	inds = sim.subpopulations.individuals;
+	numMigrants = rbinom(1, inds.size(), 0.2);
+	
+	if (numMigrants)
+	{
+		migrants = sample(inds, numMigrants);
+		currentSubpopID = migrants.subpopulation.id;
+		newSubpopID = ifelse(currentSubpopID==0, 20, 0);
+		
+		// do the pre-planned moves into each subpop in bulk
+		for (subpop in sim.subpopulations)
+			subpop.takeMigrants(migrants[newSubpopID == subpop.id]);
+	}
+}
+
+10000 late () {
+	
+	// convert all existing mutations to type m9 to track shared ancestral variation
+	sim.mutations.setMutationType(m9);
+
+}
+
+20000:40000 early () {
+	// pre-plan migration of individuals to adjacent subpops
+	inds = sim.subpopulations.individuals;
+	migrants = c();
+	newSubpopID = c();
+	numMigrants = 4;
+	
+// Move exactly 2 individuals of age 0 in each direction every generation
+	
+	displacement = c(-1, -1, 1, 1);
+	for (subpop in unique(inds.subpopulation)) {		
+		// randomly choose 4 individuals of age 0
+		migrantChoices = inds[inds.subpopulation.id == subpop.id & inds.age == 0];
+
+		// concatenate vector of migrants from each subpopulation
+		if (length(migrantChoices) > 200) {
+			subpopMigrants = sample(migrantChoices, numMigrants);
+			// get the current subpop id, subtract 1 for the first 2 and add 1 for the second 2
+			currentSubpopID = subpopMigrants.subpopulation.id;
+			new = currentSubpopID + displacement;
+			
+			migrants = c(migrants, subpopMigrants);
+			newSubpopID = c(newSubpopID, new);
+		}
+	}
+	// don't move 0 to -1 or 20 to 21		
+	actuallyMoving = (newSubpopID >= 0) & (newSubpopID < N);	
+
+		migrants = migrants[actuallyMoving];
+		newSubpopID = newSubpopID[actuallyMoving];
+		// do the pre-planned moves into each subpop in bulk
+		for (subpop in sim.subpopulations) {
+			subpop.takeMigrants(migrants[newSubpopID == subpop.id]);
+		}
+
+
+}
+
+
+early () {
+	// life table based individual mortality
+	inds = sim.subpopulations.individuals;
+	ages = inds.age;
+	mortality = L[ages];
+	survival = 1 - mortality;
+	inds.fitnessScaling = survival;	
+//	inds.fitnessScaling = inds.fitnessScaling * survival;
+	
+	// post-migration density-dependent selection on each subpop
+	for (subpop in sim.subpopulations) {
+		if (subpop.individualCount > K) {
+			subpop.fitnessScaling = K / subpop.individualCount; 			//regular density dependence based on subpop
+		}
+	}
+}
+
+
+10000 early () {
+	p20.fitnessScaling = 0;
+}
+
+
+
+20000 late() {
+	
+	// find and list the neutral mutations (m5) that have fixed in p0
+	catn();
+	iteration = 0;
+	mut_ids = unique(sort(p0.genomes.mutations.id[p0.genomes.mutations.mutationType == m5])); // get list of all of the m5 mutations that are present in p0
+	freq = rep(0.0, length(mut_ids)); // make an empty vector that is the length of mut_ids
+	for (mut in mut_ids) { //for each unique mutation id
+		iteration = iteration + 1;
+		count = 0;
+		for (genome in p0.genomes) {
+			if (any(genome.mutations.id == mut)) // if that mutation id is present in a genome
+				count = count + 1; //then count it
+		}
+		freq[iteration-1] = count / p0.genomes.size(); // deterimine the frequency of the mutation in p0, assign it to the next position in the vector "freq"
+		if (freq[iteration-1] == 1.0) { // if a mutation is fixed, then report things
+			position = unique(p0.genomes.mutations.position[p0.genomes.mutations.id == mut]);
+			type = unique(p0.genomes.mutations.mutationType.id[p0.genomes.mutations.id == mut]);
+			catn("mutation " + mut + ": type m" + type + ", fixed at position " + position + " in p0");
+			p0_fixed_mut = unique(p0.genomes.mutations[p0.genomes.mutations.id == mut]);
+			p0_fixed_mut.setMutationType(m7); //change fixed mutations in p0 to m7
+		}
+	}
+	catn();
+	
+	
+	// find and list the mutations that have fixed in p20
+	catn();
+	iteration = 0;
+	mut_ids = unique(sort(p20.genomes.mutations.id[p20.genomes.mutations.mutationType == m5])); // get list of all of the m5 mutations that are present in p20  //// CHANGE TO positionsOfMutationsOfType() at some point
+	freq = rep(0.0, length(mut_ids)); // make an empty vector that is the length of mut_ids
+	for (mut in mut_ids) { //for each unique mutation id
+		iteration = iteration + 1;
+		count = 0;
+		for (genome in p20.genomes) {
+			if (any(genome.mutations.id == mut))
+				count = count + 1;
+		}
+		freq[iteration-1] = count / p20.genomes.size();
+		if (freq[iteration-1] == 1.0) {
+			position = unique(p20.genomes.mutations.position[p20.genomes.mutations.id == mut]);
+			type = unique(p20.genomes.mutations.mutationType.id[p20.genomes.mutations.id == mut]);
+			catn("mutation " + mut + ": type m" + type + ", fixed at position " + position + " in p20");
+			p20_fixed_mut = unique(p20.genomes.mutations[p20.genomes.mutations.id == mut]);
+			p20_fixed_mut.setMutationType(m8); //change fixed mutations in p20 to m8
+		}
+	}
+	catn();
+
+}
+
+
+
+40000: late() {
+	// count of F1 hybrids (i.e. individual is het at all m7 mutation positions)
+	if (sim.generation % 500 == 0.0) {
+		m7muts = sim.mutationsOfType(m7).position; // make vector of position of each m7 mutation that exists
+		for (ind in sim.subpopulations.individuals) {
+			iteration = 0;
+			het = float(length(m7muts));
+			for (mut in m7muts) {
+				het[iteration] = calcPairHeterozygosity(ind.genomes[0], ind.genomes[1], mut, mut);
+				iteration = iteration + 1;
+				if (all(het == 1.0)) {
+					catn("(m7) " + sim.generation + ": individual " + ind.index + " in " + ind.subpopulation.name + " is a F1 hybrid");
+				}
+			}
+		}
+	}
+	
+	// count of F1 hybrids (i.e. individual is het at all m8 mutation positions)
+	if (sim.generation % 500 == 0.0) {
+		m8muts = sim.mutationsOfType(m8).position; // make vector of position of each m8 mutation that exists
+		for (ind in sim.subpopulations.individuals) {
+			iteration = 0;
+			het = float(length(m8muts));
+			for (mut in m8muts) {
+				het[iteration] = calcPairHeterozygosity(ind.genomes[0], ind.genomes[1], mut, mut);
+				iteration = iteration + 1;
+				if (all(het == 1.0)) {
+					catn("(m8) " + sim.generation + ": individual " + ind.index + " in " + ind.subpopulation.name + " is a F1 hybrid");
+				}
+			}
+		}
+	}
+
+
+
+}
+
+
+40000 late() {
+	// Output the percentage of parental ancestry at mutation types that indicate parental species
+	// for p0:
+	
+	if (sim.generation % 500 == 0.0) {
+		for (subpop in sim.subpopulations) {
+			pXg = subpop.genomes;
+			pXCounts = integer(BP); //make a vector of 0s of length BP (genome size)
+			for (g in pXg) //for each genome in the subpopulation
+				pXCounts = pXCounts + integer(BP, 0, 1, g.positionsOfMutationsOfType(m7)); //count the number of mutations of type m7 at each individual position that an m7 mutation occurs
+			maxCount = pXg.size(); //get the maximum possible number of copies of a mutation (i.e. number of genomes)
+			pXFractions = pXCounts / maxCount;
+			
+			//for each subpop, if there is non-zero m7 parental ancestry at a position, print it
+			totalm7 = float(unique(sim.subpopulations.genomes.mutationsOfType(m7)).size()); // vector of length the total amount of m7 mutations
+			iteration = 0;
+			m7_count = 0;
+			writeFile("C:/Users/bwien/Documents/Ben's Stuff/0 KU/Dissertation/Simulations/SecondaryContact_vs_IBD/IBD.anc.pro.txt", "For m7 mutations in: " + subpop.name, append = T); 
+			catn("For m7 mutations in: " + subpop.name);
+			for (pos in pXFractions) {
+				if (pos > 0.0) {
+					//					catn("Percentage of p0 ancestry at position " + iteration + ": " + pos);
+					totalm7[m7_count] = pos;
+					m7_count = m7_count + 1;
+				}
+				iteration = iteration + 1;
+			}
+			writeFile("C:/Users/bwien/Documents/Ben's Stuff/0 KU/Dissertation/Simulations/SecondaryContact_vs_IBD/IBD.anc.pro.txt", "Average p0 ancestry at m7 positions: " + mean(totalm7), append = T); 
+			catn("Average p0 ancestry at m7 positions: " + mean(totalm7));
+			catn();
+		}
+		
+		// for p20:
+		for (subpop in sim.subpopulations) {
+			pXg = subpop.genomes;
+			pXCounts = integer(BP);
+			for (g in pXg)
+				pXCounts = pXCounts + integer(BP, 0, 1, g.positionsOfMutationsOfType(m8));
+			maxCount = pXg.size();
+			pXFractions = pXCounts / maxCount;
+			
+			//for each subpop, if there is non-zero m8 parental ancestry at a position, print it
+			totalm8 = float(unique(sim.subpopulations.genomes.mutationsOfType(m8)).size()); // vector of length the total amount of m8 mutations
+			iteration = 0;
+			m8_count = 0;
+			writeFile("C:/Users/bwien/Documents/Ben's Stuff/0 KU/Dissertation/Simulations/SecondaryContact_vs_IBD/IBD.anc.pro.txt", "For m8 mutations in: " + subpop.name, append = T);
+			catn("For m8 mutations in: " + subpop.name);
+			for (pos in pXFractions) {
+				if (pos > 0.0) {
+					//					catn("Percentage of p20 ancestry at position " + iteration + ": " + pos);
+					totalm8[m8_count] = pos;
+					m8_count = m8_count + 1;
+				}
+				iteration = iteration + 1;
+			}
+			writeFile("C:/Users/bwien/Documents/Ben's Stuff/0 KU/Dissertation/Simulations/SecondaryContact_vs_IBD/IBD.anc.pro.txt", "Average p20 ancestry at m8 positions: " + mean(totalm8), append = T);
+			catn("Average p20 ancestry at m8 positions: " + mean(totalm8));
+			catn();
+		}
+	}
+}
+
+
+20000:40000 late () {
+	sizes = c();
+	if (genSinceContact == -1) {	
+		for (s in sim.subpopulations) {
+			if (s.individualCount >= 20) {
+				sizes = c(sizes, s.individualCount);
+			}
+		}
+	}
+	contact = ifelse(length(sizes) >= 21, T, F); // if 21 of the 21 subpops have >= 20 individuals, then contact is true
+	if (genSinceContact != -1) {
+		contact = T;
+	}
+	if (contact == T) {
+		genSinceContact = genSinceContact + 1;
+	}
+	if (genSinceContact % 200 == 0.0) {
+		genomesample = object();
+		for (subpop in sim.subpopulations) {
+			if (size(subpop.individuals) >= 20) {
+				pXgenomes = sample(subpop.individuals, 20, replace = F).genomes;
+				genomesample = c(genomesample, pXgenomes);
+			}
+		}
+		genomesample.outputVCF(filePath = "C:/Users/bwien/Documents/Ben's Stuff/0 KU/Dissertation/Simulations/SecondaryContact_vs_IBD/IBD.vcf", outputMultiallelics = F, append = T);
+		log = sim.createLogFile("IBD.logfile.txt", append = T); //writes to Desktop
+		log.addGeneration();
+		log.addCustomColumn(columnName = "genSinceContact", source = "genSinceContact;");
+		for (subpop in sim.subpopulations) {
+			log.addSubpopulationSize(subpop);
+		}
+		log.logRow();
+	}
+}
